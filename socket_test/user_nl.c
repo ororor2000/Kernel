@@ -11,7 +11,7 @@
 #include <errno.h>
 
 #define NETLINK_USER 30 // same customized protocol as in my kernel module
-#define MAX_PAYLOAD 1024 // maximum payload size
+#define SIZE sizeof(int) * 2 // maximum payload size
 
 struct sockaddr_nl src, dst;
 struct nlmsghdr *nlh = NULL;
@@ -21,72 +21,72 @@ int sock_fd;
 
 
 int main(int args, char *argv[]) {
-  // creating socket and getting socket fd
-  sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
+	// creating socket and getting socket fd
+	sock_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_USER);
 
-  if (sock_fd < 0) {
-    printf("error creating socket\n");
+	if (sock_fd < 0) {
+		printf("error creating socket\n");
 
-    return -1;
-  }
+		return -1;
+	}
 
-  // init src and dst adr sturcts
-  memset(&src, 0, sizeof(src));
-  memset(&dst, 0, sizeof(dst));
+	// init src and dst adr sturcts
+	memset(&src, 0, sizeof(src));
+	memset(&dst, 0, sizeof(dst));
 
-  src.nl_family = AF_NETLINK;
-  src.nl_pid = getpid();
+	src.nl_family = AF_NETLINK;
+	src.nl_pid = getpid();
 
-  if (bind(sock_fd, &src, sizeof(src))) {
-    printf("error on bind\n");
-    close(sock_fd);
+	if (bind(sock_fd, &src, sizeof(src))) {
+		printf("error on bind\n");
+		close(sock_fd);
 
-    return -1;
-  }
+		return -1;
+	}
 
-  dst.nl_family = AF_NETLINK;
-  dst.nl_pid = 0; // 0 is the kernel
-  dst.nl_groups = 0; // 0 is for unicast
+	dst.nl_family = AF_NETLINK;
+	dst.nl_pid = 0; // 0 is the kernel
+	dst.nl_groups = 0; // 0 is for unicast
 
-  nlh = (struct nlmsghdr*)malloc(NLMSG_SPACE(MAX_PAYLOAD));  
+	nlh = (struct nlmsghdr*)malloc(NLMSG_SPACE(SIZE));  
 
-  memset(nlh, 0, NLMSG_SPACE(MAX_PAYLOAD));
-  
-  nlh->nlmsg_len = NLMSG_SPACE(MAX_PAYLOAD);
+	memset(nlh, 0, NLMSG_SPACE(SIZE));
 
-  nlh->nlmsg_pid = getpid();    
-  nlh->nlmsg_flags = 0;
+	nlh->nlmsg_len = NLMSG_SPACE(SIZE);
 
-  char user_msg[MAX_PAYLOAD] = {0};
+	nlh->nlmsg_pid = getpid();    
+	nlh->nlmsg_flags = 0;
 
-  printf("enter message to kernel:\n");
-  fgets(&user_msg, MAX_PAYLOAD, stdin);
+	int* user_msg = malloc(SIZE);
 
-  printf("len is %llu\n", strlen(user_msg));
+	printf("enter pin number and mode (21, 1):\n");
+	scanf("%d %d", &user_msg[0], &user_msg[1]);
+	
+	printf("first: %d, second: %d\n", user_msg[0], user_msg[1]);
 
-  strcpy(NLMSG_DATA(nlh), user_msg);
+	memcpy(NLMSG_DATA(nlh), user_msg, SIZE);	
 
-  iov.iov_base = (void*)nlh;  
-  iov.iov_len = nlh->nlmsg_len;  
-  msg.msg_name = (void*)&dst;
-  msg.msg_namelen = sizeof(dst);  
-  msg.msg_iov = &iov;  
-  msg.msg_iovlen = 1;
+	iov.iov_base = (void*)nlh;  
+	iov.iov_len = nlh->nlmsg_len;  
+	msg.msg_name = (void*)&dst;
+	msg.msg_namelen = sizeof(dst);  
+	msg.msg_iov = &iov;  
+	msg.msg_iovlen = 1;
 
 
-  printf("sending msg '%s' to the kernel\n", user_msg);
+	printf("sending msg to the kernel\n");
 
-  int ret = sendmsg(sock_fd, &msg, 0);
-  printf("sending msg - ret: %d\n", ret);
+	int ret = sendmsg(sock_fd, &msg, 0);
+	printf("sending msg - ret: %d\n", ret);
 
-  printf("waiting for response...\n");
+	printf("waiting for response...\n");
 
-  recvmsg(sock_fd, &msg, 0);
+	recvmsg(sock_fd, &msg, 0);
 
-  //char* kernel_msg[MAX_PAYLOAD] = (char* )NLMSG_DATA(nl_res_header);
+	//char* kernel_msg[MAX_PAYLOAD] = (char* )NLMSG_DATA(nl_res_header);
+	user_msg = (int*)NLMSG_DATA(nlh);
+	printf("kernel msg, first: %d, second: %d\n", *user_msg, *(user_msg+1));
 
-  printf("kernel msg: %s\n", (char*)NLMSG_DATA(nlh));
-
-  close(sock_fd);
-  return 0;
+	close(sock_fd);
+	return 0;
 }
